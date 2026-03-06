@@ -1,0 +1,20 @@
+{
+  "name": "jira-automation-lambda",
+  "version": "1.0.0",
+  "description": "Lean Jira → GitHub → Claude Code automation Lambda",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/handler.ts --bundle --platform=node --target=node20 --outfile=dist/handler.mjs --format=esm --external:@aws-sdk/*",
+    "zip": "cd dist && zip -r ../deploy.zip handler.mjs",
+    "deploy": "npm run build && npm run zip"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0",
+    "@types/aws-lambda": "^8.10.140",
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.21.0",
+    "typescript": "^5.5.0"
+  }
+}
