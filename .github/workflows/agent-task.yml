@@ -8,6 +8,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  id-token: write
 
 env:
   TASK_ID: ${{ github.event.client_payload.taskId }}
@@ -51,8 +52,6 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           use_bedrock: true
-          max_turns: 30
-          timeout_minutes: 20
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
