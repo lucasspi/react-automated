@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Lambda build artifacts
+automation/lambda/dist
+automation/lambda/deploy.zip
+automation/lambda/node_modules
+automation/lambda/.env
+
+# Terraform
+automation/infra/.terraform
+automation/infra/*.tfstate*
+automation/infra/.terraform.lock.hcl
+automation/infra/terraform.tfvars
