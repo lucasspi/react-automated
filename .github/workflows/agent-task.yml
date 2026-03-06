@@ -47,18 +47,14 @@ jobs:
         run: |
           git checkout -b "${{ env.BRANCH_NAME }}"
 
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
-        with:
-          use_bedrock: true
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          ANTHROPIC_MODEL: us.anthropic.claude-sonnet-4-20250514
-          prompt: |
-            You are an automation agent working on the react-automated repository.
+        run: |
+          claude -p \
+            "You are an automation agent working on the react-automated repository.
             A Jira ticket has been assigned to you. Implement the requested changes.
 
             ## Jira Issue
@@ -70,16 +66,25 @@ jobs:
             1. Read the issue summary and description carefully.
             2. Understand what code changes are needed in this React TypeScript project.
             3. Implement the changes with clean, well-structured code.
-            4. Make sure the code compiles (run `npx tsc --noEmit` to check).
+            4. Make sure the code compiles (run npx tsc --noEmit to check).
             5. If tests exist, make sure they pass.
             6. Keep changes minimal and focused on the ticket.
-            7. Do NOT modify files in the `automation/` or `.github/` directories.
+            7. Do NOT modify files in the automation/ or .github/ directories.
 
             ## Important
             - This is a Vite + React + TypeScript project.
             - Only change files relevant to the ticket.
             - Write clear commit messages.
-            - If the task is unclear, implement the most reasonable interpretation and note assumptions.
+            - If the task is unclear, implement the most reasonable interpretation and note assumptions." \
+            --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
+            --yes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: us.anthropic.claude-sonnet-4-20250514
+          CLAUDE_CODE_USE_BEDROCK: "1"
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
 
       - name: Check for changes
         id: changes
