@@ -80,7 +80,7 @@ jobs:
             --dangerously-skip-permissions
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_MODEL: us.anthropic.claude-sonnet-4-20250514
+          CLAUDE_MODEL: global.anthropic.claude-sonnet-4-20250514-v1:0
           CLAUDE_CODE_USE_BEDROCK: "1"
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
