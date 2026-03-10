@@ -479,18 +479,92 @@ async function createTask(
 function parseWebhookEvent(body: string): JiraWebhookEvent | null {
   try {
     return JSON.parse(body) as JiraWebhookEvent;
-  } catch {
-    // Jira Automation smart values may inject unescaped newlines/tabs inside
-    // JSON string values. Escape them and retry.
-    try {
-      const sanitized = body.replace(
-        /"(?:[^"\\]|\\.)*"/g,
-        (match) => match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
-      );
-      return JSON.parse(sanitized) as JiraWebhookEvent;
-    } catch {
+  } catch { /* fall through */ }
+
+  // Jira Automation smart values may inject unescaped newlines/tabs inside
+  // JSON string values. Escape them and retry.
+  try {
+    const sanitized = body.replace(
+      /"(?:[^"\\]|\\.)*"/g,
+      (match) => match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+    );
+    return JSON.parse(sanitized) as JiraWebhookEvent;
+  } catch { /* fall through */ }
+
+  // Last resort: replace ALL control characters globally. This handles cases
+  // where unescaped quotes in field values (e.g. description) break the
+  // regex-based string matcher above.
+  try {
+    const fixed = body
+      .replace(/\r\n/g, "\\r\\n")
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t")
+      .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
+    return JSON.parse(fixed) as JiraWebhookEvent;
+  } catch { /* fall through */ }
+
+  return null;
+}
+
+/**
+ * Extract issue key from a raw (potentially malformed) webhook body.
+ * Issue keys like "ST-136" appear early in the payload, before the
+ * description field that typically causes parse failures.
+ */
+function extractIssueKey(body: string): string | null {
+  const match = body.match(/"key"\s*:\s*"([A-Z][A-Z0-9]+-\d+)"/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Fetch issue fields directly from the Jira REST API.
+ * Used as a fallback when the webhook body cannot be parsed.
+ */
+async function fetchJiraIssue(issueKey: string): Promise<JiraWebhookEvent["issue"] | null> {
+  try {
+    const res = await fetch(
+      jiraUrl(`/issue/${issueKey}?fields=summary,description,status,issuetype,labels,assignee`),
+      { headers: jiraHeaders() }
+    );
+    if (!res.ok) {
+      log("Failed to fetch Jira issue", { issueKey, status: res.status });
       return null;
     }
+    const data = (await res.json()) as {
+      key: string;
+      fields: {
+        summary: string;
+        description: unknown;
+        status: { name: string };
+        issuetype: { name: string };
+        labels: Array<{ name: string } | string>;
+        assignee?: { displayName: string } | null;
+      };
+    };
+
+    // Jira Cloud returns description as ADF (JSON object). Convert to text if needed.
+    let description: string | null = null;
+    if (typeof data.fields.description === "string") {
+      description = data.fields.description;
+    } else if (data.fields.description) {
+      description = JSON.stringify(data.fields.description);
+    }
+
+    return {
+      key: data.key,
+      fields: {
+        summary: data.fields.summary,
+        description,
+        status: data.fields.status,
+        issuetype: data.fields.issuetype,
+        labels: data.fields.labels.map((l) => (typeof l === "string" ? l : l.name)),
+        assignee: data.fields.assignee,
+      },
+    };
+  } catch (err) {
+    log("Fetch Jira issue error", { issueKey, error: String(err) });
+    return null;
   }
 }
 
@@ -539,9 +613,27 @@ export async function handler(
   const rawBody = event.body || "";
   log("Raw webhook body", { body: rawBody.slice(0, 2000) });
 
-  const webhookEvent = parseWebhookEvent(rawBody);
+  let webhookEvent = parseWebhookEvent(rawBody);
+
+  // Fallback: if the body can't be parsed (e.g. Jira Automation smart values
+  // injected unescaped quotes/newlines), extract the issue key and fetch from
+  // the Jira REST API directly.
   if (!webhookEvent || !webhookEvent.issue) {
-    log("Invalid webhook payload", { bodyLength: rawBody.length, parsed: !!webhookEvent });
+    const fallbackKey = extractIssueKey(rawBody);
+    if (fallbackKey) {
+      log("Webhook parse failed, fetching issue from Jira API", { issueKey: fallbackKey });
+      const issue = await fetchJiraIssue(fallbackKey);
+      if (issue) {
+        webhookEvent = {
+          webhookEvent: "jira:issue_updated",
+          issue,
+        };
+      }
+    }
+  }
+
+  if (!webhookEvent || !webhookEvent.issue) {
+    log("Invalid webhook payload", { bodyLength: rawBody.length, parsed: false });
     return respond(400, { error: "Invalid payload" });
   }
 
