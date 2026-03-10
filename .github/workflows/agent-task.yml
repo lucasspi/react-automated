@@ -71,6 +71,13 @@ jobs:
             6. Keep changes minimal and focused on the ticket.
             7. Do NOT modify files in the automation/ or .github/ directories.
 
+            ## Code Style
+            - Be concise. Write the minimum code needed to solve the ticket — no more.
+            - Do NOT add unnecessary comments. Only comment non-obvious logic or workarounds.
+            - Do NOT overengineer. No extra abstractions, wrapper functions, or utility layers unless explicitly requested.
+            - Prefer simple, direct solutions over clever or generic ones.
+            - Do NOT add unrelated improvements, refactors, or 'nice-to-haves' beyond the ticket scope.
+
             ## Important
             - This is a Vite + React + TypeScript project.
             - Only change files relevant to the ticket.
@@ -179,44 +186,126 @@ jobs:
           PR_URL="${{ steps.pr.outputs.pr_url }}"
           BRANCH="${{ env.BRANCH_NAME }}"
           HAS_CHANGES="${{ steps.changes.outputs.has_changes }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           if [ "$HAS_CHANGES" == "true" ] && [ -n "$PR_URL" ]; then
-            COMMENT="🤖 Agent completed implementation.\n\n• Branch: ${BRANCH}\n• PR: ${PR_URL}\n• Status: Ready for code review\n\nThe ticket has been moved to CODE REVIEW."
+            # Success with PR — use ADF with clickable link
+            BODY=$(cat <<EOF
+          {"type":"doc","version":1,"content":[
+            {"type":"paragraph","content":[
+              {"type":"text","text":"Agent completed implementation.","marks":[{"type":"strong"}]}
+            ]},
+            {"type":"bulletList","content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Branch: "},{"type":"text","text":"${BRANCH}","marks":[{"type":"code"}]}
+              ]}]},
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Pull Request: "},
+                {"type":"inlineCard","attrs":{"url":"${PR_URL}"}}
+              ]}]},
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Actions Run: "},
+                {"type":"inlineCard","attrs":{"url":"${RUN_URL}"}}
+              ]}]}
+            ]},
+            {"type":"paragraph","content":[
+              {"type":"text","text":"Status: Ready for code review"}
+            ]}
+          ]}
+          EOF
+          )
           elif [ "$HAS_CHANGES" == "false" ]; then
-            COMMENT="🤖 Agent reviewed the ticket but found no code changes needed.\n\nPlease review the issue description and clarify what needs to be done."
+            BODY=$(cat <<EOF
+          {"type":"doc","version":1,"content":[
+            {"type":"paragraph","content":[
+              {"type":"text","text":"Agent reviewed the ticket but found no code changes needed. Please review the issue description and clarify what needs to be done."}
+            ]},
+            {"type":"bulletList","content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Actions Run: "},
+                {"type":"inlineCard","attrs":{"url":"${RUN_URL}"}}
+              ]}]}
+            ]}
+          ]}
+          EOF
+          )
           else
-            COMMENT="🔴 Agent encountered an issue during implementation.\n\n• Branch: ${BRANCH}\n• Check GitHub Actions logs for details.\n• You may need to retry by moving the ticket back to TODO → TRIGGER AGENT."
+            BODY=$(cat <<EOF
+          {"type":"doc","version":1,"content":[
+            {"type":"paragraph","content":[
+              {"type":"text","text":"Agent encountered an issue during implementation.","marks":[{"type":"strong"}]}
+            ]},
+            {"type":"bulletList","content":[
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Branch: "},{"type":"text","text":"${BRANCH}","marks":[{"type":"code"}]}
+              ]}]},
+              {"type":"listItem","content":[{"type":"paragraph","content":[
+                {"type":"text","text":"Actions Run: "},
+                {"type":"inlineCard","attrs":{"url":"${RUN_URL}"}}
+              ]}]}
+            ]},
+            {"type":"paragraph","content":[
+              {"type":"text","text":"Check the Actions logs for details. You may need to retry by moving the ticket back to TODO then TRIGGER AGENT."}
+            ]}
+          ]}
+          EOF
+          )
           fi
+
+          # Remove newlines/extra spaces from BODY for valid JSON
+          BODY_CLEAN=$(echo "$BODY" | tr -d '\n' | sed 's/  */ /g')
 
           curl -s -u "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
             -H "Content-Type: application/json" \
             -X POST \
             "https://${{ secrets.JIRA_BASE_URL }}/rest/api/3/issue/${{ env.ISSUE_KEY }}/comment" \
-            -d "{\"body\":{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"$(echo -e "$COMMENT")\"}]}]}}"
+            -d "{\"body\":${BODY_CLEAN}}"
 
       - name: Slack Notification
         if: always()
         run: |
           PR_URL="${{ steps.pr.outputs.pr_url }}"
           HAS_CHANGES="${{ steps.changes.outputs.has_changes }}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           if [ "$HAS_CHANGES" == "true" ] && [ -n "$PR_URL" ]; then
-            EMOJI="🟢"
-            STATUS="PR created — ready for review"
-            PR_LINE="\n*PR:* ${PR_URL}"
+            PAYLOAD=$(cat <<EOF
+          {
+            "blocks": [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Agent Task Complete* — \`${{ env.ISSUE_KEY }}\`\n*Summary:* ${{ env.SUMMARY }}"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Status:* PR created — ready for review\n*PR:* <${PR_URL}|View Pull Request>\n*Branch:* \`${{ env.BRANCH_NAME }}\`"}},
+              {"type":"context","elements":[{"type":"mrkdwn","text":"<${RUN_URL}|View Actions Run>"}]}
+            ]
+          }
+          EOF
+          )
           elif [ "$HAS_CHANGES" == "false" ]; then
-            EMOJI="🟡"
-            STATUS="No changes needed"
-            PR_LINE=""
+            PAYLOAD=$(cat <<EOF
+          {
+            "blocks": [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Agent Task Complete* — \`${{ env.ISSUE_KEY }}\`\n*Summary:* ${{ env.SUMMARY }}"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Status:* No changes needed — review the ticket description"}},
+              {"type":"context","elements":[{"type":"mrkdwn","text":"<${RUN_URL}|View Actions Run>"}]}
+            ]
+          }
+          EOF
+          )
           else
-            EMOJI="🔴"
-            STATUS="Failed — check GitHub Actions logs"
-            PR_LINE=""
+            PAYLOAD=$(cat <<EOF
+          {
+            "blocks": [
+              {"type":"section","text":{"type":"mrkdwn","text":"*Agent Task Failed* — \`${{ env.ISSUE_KEY }}\`\n*Summary:* ${{ env.SUMMARY }}"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Status:* Failed — check logs\n*Branch:* \`${{ env.BRANCH_NAME }}\`"}},
+              {"type":"context","elements":[{"type":"mrkdwn","text":"<${RUN_URL}|View Actions Run>"}]}
+            ]
+          }
+          EOF
+          )
           fi
 
           curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -d "{\"text\":\"${EMOJI} *Agent Task Complete* — \`${{ env.ISSUE_KEY }}\`\n*Summary:* ${{ env.SUMMARY }}\n*Status:* ${STATUS}${PR_LINE}\"}"
+            -d "$(echo "$PAYLOAD" | tr -d '\n' | sed 's/  */ /g')"
 
       - name: Update DynamoDB Task Status
         if: always()
