@@ -1,73 +1,119 @@
-# React + TypeScript + Vite
+# react-automated
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React + TypeScript application with an automated Jira-to-GitHub development pipeline. When a Jira ticket is moved to "TRIGGER AGENT", an AWS Lambda function triggers a GitHub Actions workflow that runs Claude Code to implement the changes, create a pull request, and transition the issue to code review — all automatically.
 
-Currently, two official plugins are available:
+## Project Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+**react-automated** combines a modern React frontend with a fully automated agent-driven development workflow:
 
-## React Compiler
+- **React Frontend** (`src/`) — A React 19 + TypeScript + Vite application
+- **Automation Infrastructure** (`automation/`) — AWS Lambda and DynamoDB for handling Jira webhooks and task deduplication
+- **CI/CD Agent Workflow** (`.github/workflows/agent-task.yml`) — GitHub Actions workflow that runs Claude Code to implement Jira tickets autonomously
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The automation pipeline reads Jira ticket descriptions, implements the requested changes, commits code, creates pull requests, updates Jira status, and posts notifications to Slack.
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **React 19** — Modern React with concurrent features
+- **TypeScript 5.9** — Type-safe development
+- **Vite 7** — Fast build tool and dev server with HMR
+- **ESLint** — Code linting and quality checks
+- **GitHub Actions** — CI/CD automation
+- **AWS Lambda** — Serverless webhook handler (Node.js 20)
+- **AWS DynamoDB** — Task deduplication and state tracking
+- **Jira API** — Issue tracking and status transitions
+- **Slack Webhooks** — Team notifications
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Prerequisites
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+- Node.js 20 or higher
+- npm (comes with Node.js)
+
+### Installation
+
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Available Scripts
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `npm run dev` — Start development server with hot module reloading
+- `npm run build` — Type-check with TypeScript and build for production
+- `npm run lint` — Run ESLint to check code quality
+- `npm run preview` — Preview production build locally
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Project Structure
+
 ```
+react-automated/
+├── src/                  # React application source code
+│   ├── App.tsx           # Main application component
+│   ├── main.tsx          # Application entry point
+│   └── assets/           # Static assets
+├── automation/           # Infrastructure and Lambda functions
+│   ├── lambda/           # AWS Lambda webhook handler
+│   │   └── src/handler.ts
+│   └── infra/            # Terraform infrastructure definitions
+│       └── main.tf
+├── .github/workflows/    # GitHub Actions workflows
+│   └── agent-task.yml    # Claude Code agent automation
+└── public/               # Public static files
+```
+
+## Jira Automation Workflow
+
+The automated agent pipeline works as follows:
+
+1. **Jira Trigger** — Move a Jira ticket from TODO to "TRIGGER AGENT"
+2. **Webhook to Lambda** — Jira sends a webhook POST to AWS Lambda Function URL
+3. **Task Validation** — Lambda verifies the webhook, checks for duplicates in DynamoDB, validates no existing PRs exist
+4. **Jira Update** — Lambda transitions the issue to "IN PROGRESS" and posts a comment
+5. **GitHub Dispatch** — Lambda triggers GitHub Actions via `repository_dispatch` event with ticket details
+6. **Agent Implementation** — GitHub Actions workflow:
+   - Checks out the repository and creates a feature branch
+   - Installs dependencies and Claude Code CLI
+   - Runs Claude Code with the Jira ticket description as a prompt
+   - Claude Code reads relevant files, implements the changes, and verifies compilation
+7. **PR Creation** — If changes were made, commits are pushed and a pull request is created
+8. **Status Transition** — Jira ticket is transitioned to "CODE REVIEW"
+9. **Notifications** — Updates are posted to:
+   - Jira (comment with PR link)
+   - Slack (notification with PR and workflow links)
+   - DynamoDB (task status tracking)
+
+The entire process is fully automated from ticket assignment to code review, with human review only required for PR approval.
+
+## Environment Variables / Secrets
+
+The following secrets must be configured in GitHub repository settings (Settings → Secrets and variables → Actions):
+
+| Secret | Description |
+|--------|-------------|
+| `ANTHROPIC_API_KEY` | API key for Claude Code (Anthropic) |
+| `AWS_ACCESS_KEY_ID` | AWS access key for DynamoDB updates |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret key for DynamoDB updates |
+| `AWS_REGION` | AWS region for DynamoDB (e.g., `us-east-1`) |
+| `JIRA_EMAIL` | Email for Jira API authentication |
+| `JIRA_API_TOKEN` | API token for Jira API authentication |
+| `JIRA_BASE_URL` | Jira instance base URL (e.g., `company.atlassian.net`) |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL for notifications |
+| `DYNAMODB_TABLE` | DynamoDB table name for task tracking (e.g., `jira-agent-tasks-prod`) |
+
+Additional infrastructure setup and Lambda configuration details are documented in `automation/README.md`.
+
+## Contributing
+
+This project uses an automated agent workflow. To contribute:
+
+1. Create a Jira ticket with a clear description of the desired changes
+2. Move the ticket to "TRIGGER AGENT" status
+3. The agent will create a PR automatically
+4. Review the PR, request changes if needed, or merge when satisfied
+
+For manual contributions, follow standard Git workflow practices and ensure `npm run lint` passes before creating a PR.
+
+## License
+
+MIT
