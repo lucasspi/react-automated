@@ -76,8 +76,8 @@ jobs:
             - Only change files relevant to the ticket.
             - Write clear commit messages.
             - If the task is unclear, implement the most reasonable interpretation and note assumptions." \
-            --allowedTools "Bash,Read,Write,Edit,Glob,Grep" \
-            --yes
+            --allowedTools "Bash" "Read" "Write" "Edit" "Glob" "Grep" \
+            --dangerously-skip-permissions
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: us.anthropic.claude-sonnet-4-20250514
