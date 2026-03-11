@@ -1,73 +1,92 @@
-# React + TypeScript + Vite
+# react-automated
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Project Overview
 
-Currently, two official plugins are available:
+**react-automated** is a React + TypeScript application with an integrated Jira-to-GitHub automation pipeline. The project demonstrates an autonomous development workflow where Jira tickets automatically trigger GitHub Actions that use Claude Code to implement changes, create pull requests, and update Jira issues.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Key components:
+- **React frontend** (`src/`) — The main application built with React 19 and TypeScript
+- **Automation infrastructure** (`automation/`) — AWS Lambda functions and infrastructure code for the Jira integration backend
+- **CI/CD agent workflow** (`.github/workflows/agent-task.yml`) — GitHub Actions workflow that orchestrates the automated development pipeline
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **React 19** — Modern React with latest features
+- **TypeScript 5.9** — Type-safe JavaScript
+- **Vite 7** — Fast build tool and dev server
+- **ESLint** — Code linting and quality checks
+- **GitHub Actions** — CI/CD automation
+- **AWS Lambda** — Serverless functions for webhook handling
+- **AWS DynamoDB** — State management for automation pipeline
+- **Jira API** — Issue tracking integration
+- **Slack Webhooks** — Team notifications
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Node.js 20 or higher
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Installation
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Available Scripts
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- `npm run dev` — Start the development server with hot reload
+- `npm run build` — Build the production bundle
+- `npm run lint` — Run ESLint to check code quality
+- `npm run preview` — Preview the production build locally
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Project Structure
+
 ```
+react-automated/
+├── src/                  # React application source code
+│   ├── components/       # React components
+│   ├── App.tsx          # Main application component
+│   └── main.tsx         # Application entry point
+├── automation/          # Infrastructure and Lambda functions for Jira agent pipeline
+│   ├── lambda/          # Lambda function handlers
+│   └── infrastructure/  # AWS CDK or Terraform configuration
+└── .github/
+    └── workflows/       # GitHub Actions workflow definitions
+        └── agent-task.yml  # Automated agent workflow
+```
+
+## Jira Automation Workflow
+
+The project includes a fully automated development workflow:
+
+1. **Jira Ticket Creation** — A developer creates or transitions a Jira ticket to a specific status
+2. **Webhook Trigger** — Jira webhook fires and invokes the AWS Lambda function
+3. **GitHub Dispatch** — Lambda sends a `repository_dispatch` event to trigger the GitHub Actions workflow
+4. **Agent Execution** — The GitHub Actions workflow (`agent-task.yml`) runs Claude Code agent to:
+   - Read and understand the Jira ticket requirements
+   - Implement the necessary code changes
+   - Run tests and quality checks
+   - Create a pull request with the changes
+5. **Jira Update** — The agent transitions the Jira issue to CODE REVIEW status
+6. **Notifications** — Status updates and PR links are posted to Slack
+
+This workflow enables autonomous ticket implementation with minimal human intervention.
+
+## Environment Variables / Secrets
+
+The following secrets must be configured in GitHub Actions and AWS Lambda:
+
+| Secret | Description |
+|--------|-------------|
+| `ANTHROPIC_API_KEY` | API key for Claude Code agent |
+| `AWS_ACCESS_KEY_ID` | AWS access key for Lambda and DynamoDB |
+| `AWS_SECRET_ACCESS_KEY` | AWS secret access key |
+| `AWS_REGION` | AWS region (e.g., `us-east-1`) |
+| `JIRA_EMAIL` | Email address for Jira API authentication |
+| `JIRA_API_TOKEN` | Jira API token for authentication |
+| `JIRA_BASE_URL` | Base URL of your Jira instance |
+| `SLACK_WEBHOOK_URL` | Slack webhook URL for notifications |
+| `DYNAMODB_TABLE` | DynamoDB table name for state management |
+
+**Security Note:** Never commit these secrets to version control. Configure them in GitHub repository settings and AWS Systems Manager Parameter Store or Secrets Manager.
